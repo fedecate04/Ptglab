@@ -43,7 +43,7 @@ with tabs[2]:
         with col1:
             id_muestra = st.text_input("ID de muestra")
             fecha = st.date_input("Fecha de toma")
-            origen = st.selectbox("Punto de muestreo", ["Scrubber", Línea", "Separador", "Pozo"])
+            origen = st.selectbox("Punto de muestreo", ["Scrubber", "Línea", "Separador", "Pozo"])
         with col2:
             tipo = st.selectbox("Tipo de muestra", ["Gas", "MEG", "Agua", "Otro"])
             operador = st.text_input("Nombre del operador")
