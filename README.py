@@ -1,23 +1,28 @@
-import streamlit as st import pandas as pd import numpy as np from fpdf import FPDF import io from datetime import datetime
+import streamlit as st
+import pandas as pd
+import numpy as np
+from fpdf import FPDF
+import io
+import os
+from datetime import datetime
 
-Configuración general
+# Configuración de la app
+st.set_page_config(page_title="LTS Lab Analyzer", layout="wide")
+st.title("🧪 Laboratorio de Planta LTS")
 
-st.set_page_config(page_title="LTS Lab Analyzer", layout="wide") st.title("Laboratorio de Planta LTS - Selección de Análisis")
+# Crear carpetas si no existen
+os.makedirs("informes/gas_natural", exist_ok=True)
 
-Página principal con selector
+# Selector de análisis
+opcion = st.selectbox("🔍 ¿Qué análisis desea realizar?", [
+    "-- Seleccionar --",
+    "Gas Natural",
+    "Gasolina Estabilizada",
+    "MEG",
+    "Agua Desmineralizada"
+])
 
-st.subheader("¿Qué análisis desea realizar?")
-
-opcion = st.selectbox("Seleccioná el tipo de análisis:", [ "-- Seleccionar --", "Propiedades del Gas Natural", "Gasolina Estabilizada", "MEG", "Agua Desmineralizada" ])
-
-Función base para exportar PDF
-
-class PDF(FPDF): def header(self): self.set_font('Arial', 'B', 12) self.cell(0, 10, 'Informe de Análisis de Muestra', 0, 1, 'C') self.ln(5) def add_sample(self, nombre, resultados): self.set_font('Arial', '', 10) self.cell(0, 10, f"Muestra: {nombre}", 0, 1) for k, v in resultados.items(): self.cell(0, 8, f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}", 0, 1) self.ln(3)
-
-Análisis de propiedades del gas natural
-
-if opcion == "Propiedades del Gas Natural": st.subheader("Cálculo de Propiedades del Gas Natural")
-
+# Propiedades de los componentes del gas
 PM = {
     'CH4': 16.04, 'C2H6': 30.07, 'C3H8': 44.10,
     'i-C4H10': 58.12, 'n-C4H10': 58.12, 'i-C5H12': 72.15, 'n-C5H12': 72.15,
@@ -34,6 +39,7 @@ PM_aire = 28.96
 T_std = 288.15
 P_std = 101325
 
+# Función para análisis de composición
 def analizar_composicion(composicion):
     composicion = {k: float(v) for k, v in composicion.items() if k in PM}
     total = sum(composicion.values())
@@ -61,40 +67,76 @@ def analizar_composicion(composicion):
         'Ingreso estimado (USD/m3)': ingreso
     }
 
-st.markdown("**Ingresá la composición molar (%):**")
-composicion = {}
-for comp in PM:
-    composicion[comp] = st.number_input(f"{comp}", min_value=0.0, max_value=100.0, step=0.01)
+# Clase para generar PDF
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Informe de Análisis de Gas Natural', 0, 1, 'C')
+        self.ln(5)
 
-if st.button("Calcular propiedades del gas"):
-    suma = sum(composicion.values())
-    if abs(suma - 100) > 1:
-        st.warning(f"La suma de fracciones molares es {suma:.2f}%. Verificá los valores.")
-    else:
-        resultados = analizar_composicion(composicion)
-        st.success("Resultados del análisis")
-        st.dataframe(pd.DataFrame.from_dict(resultados, orient='index', columns=['Valor']))
+    def add_explanation(self, explicacion):
+        self.set_font('Arial', '', 10)
+        for linea in explicacion:
+            self.multi_cell(0, 8, linea)
+        self.ln(4)
 
-        operador = st.text_input("Nombre del operador")
-        if st.button("Descargar informe PDF"):
-            pdf = PDF()
-            pdf.add_page()
-            pdf.add_sample(f"Gas Natural - {operador}", resultados)
-            buffer = io.BytesIO()
-            pdf.output(buffer)
-            buffer.seek(0)
-            st.download_button(
-                label="Descargar informe",
-                data=buffer,
-                file_name=f"Informe_Gas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf"
-            )
+    def add_sample(self, operador, resultados):
+        self.set_font('Arial', '', 10)
+        self.cell(0, 10, f"Operador: {operador}", 0, 1)
+        for k, v in resultados.items():
+            val = f"{v:.4f}" if isinstance(v, float) else v
+            self.cell(0, 8, f"{k}: {val}", 0, 1)
+        self.ln(3)
 
-Placeholder para próximos análisis
+explicacion_gas = [
+    "Este análisis calcula propiedades del gas natural a partir de su composición molar:",
+    "- PM (peso molecular): promedio ponderado de los componentes.",
+    "- PCS (poder calorífico superior): energía por m³.",
+    "- Wobbe: importante para el diseño de quemadores.",
+    "- Gamma: relación con el aire.",
+    "- Dew Point: indica si hay riesgo de condensación.",
+    "- H2S ppm: contenido de sulfuro de hidrógeno.",
+    "- Ingreso estimado: valor económico aproximado del gas.",
+    "Las propiedades se validan según normas de calidad para transporte y venta."
+]
 
-elif opcion == "Gasolina Estabilizada": st.subheader("Análisis de Gasolina Estabilizada") st.info("Módulo en desarrollo. Próximamente podrás cargar TVR, sales, densidad y apariencia.")
+# SUBPÁGINA: Gas Natural
+if opcion == "Gas Natural":
+    st.subheader("🛢️ Análisis de Propiedades del Gas Natural")
+    st.markdown("Cargá el archivo CSV con la composición molar (%). Debe tener los siguientes encabezados:")
+    st.code(", ".join(PM.keys()))
 
-elif opcion == "MEG": st.subheader("Análisis de MEG") st.info("Módulo en desarrollo. Se podrán ingresar pH, concentración y temperatura.")
+    archivo = st.file_uploader("📁 Cargar archivo CSV", type=["csv"])
+    operador = st.text_input("👤 Ingresá tu nombre o el del operador")
 
-elif opcion == "Agua Desmineralizada": st.subheader("Análisis de Agua Desmineralizada") st.info("Módulo en desarrollo. Incluirá pH, conductividad, cloruros y otros parámetros.")
+    if archivo is not None:
+        try:
+            df = pd.read_csv(archivo)
+            composicion = df.iloc[0].to_dict()
+            resultados = analizar_composicion(composicion)
+
+            st.success("✅ Resultados del análisis")
+            st.dataframe(pd.DataFrame.from_dict(resultados, orient='index', columns=['Valor']))
+
+            # Generar PDF
+            if st.button("📄 Descargar informe PDF"):
+                pdf = PDF()
+                pdf.add_page()
+                pdf.add_explanation(explicacion_gas)
+                pdf.add_sample(operador, resultados)
+
+                nombre_pdf = f"Informe_Gas_{operador}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                ruta_pdf = f"informes/gas_natural/{nombre_pdf}"
+                pdf.output(ruta_pdf)
+
+                with open(ruta_pdf, "rb") as file:
+                    st.download_button(
+                        label="⬇️ Descargar informe",
+                        data=file,
+                        file_name=nombre_pdf,
+                        mime="application/pdf"
+                    )
+        except Exception as e:
+            st.error(f"❌ Error al leer el archivo: {e}")
+
 
